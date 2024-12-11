@@ -159,35 +159,37 @@ int main(void)
     //   LED_Off(leds[2-i]);
     //   HAL_Delay(500);
     // }
-    // HAL_GPIO_WritePin(GPIOB,GPIO_PIN_12,GPIO_PIN_RESET);
-    // HAL_Delay(500);
-    // HAL_GPIO_WritePin(GPIOB,GPIO_PIN_12,GPIO_PIN_SET);
-    // HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
-    // HAL_Delay(500);
-    /* USER CODE BEGIN 3 */
   }
   /* USER CODE END 3 */
 }
-
-/// @brief 中断回调
-void EXTI0_IRQHandler(void)
+/// @brief 调用HAL_GPIO_EXTI_IRQHandler的回调
+/// @param GPIO_Pin 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
-
-  //  HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
-    //清除中断挂起标志位
-    // EXTI->PR |= EXTI_PR_PR0;
-    __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);
+  if (GPIO_Pin == GPIO_PIN_0)
+  {
     HAL_Delay(10);
-    
     //判断依然保持高电平 就翻转LED
-    if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_0) == 1)
+    if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_0) == GPIO_PIN_SET)
     // if ((GPIOB->IDR & GPIO_IDR_IDR0) != 0)
     {
       HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
     }else{
       
     }
-    
+  }
+  
+}
+
+/// @brief 中断回调
+/// HAL_GPIO_EXTI_IRQHandler 方法内自动清除中断请求
+void EXTI0_IRQHandler(void)
+{
+
+   HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
+    //清除中断挂起标志位
+    // EXTI->PR |= EXTI_PR_PR0;
+    // __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0); 
 }
 
 /**

@@ -1,5 +1,5 @@
 
-#### 点亮板上的C13 LED灯
+### 点亮板上的C13 LED灯
   1. RCC->APB2ENR外设时钟使能寄存器（单独的寄存器记录需要使能的外设是那个寄存器）  
   //使能 GPIOC的外设寄存器，也就是让CPU处理这部分的, 设置为1  
   // RCC->APB2ENR |= 4; 4 -> 0000 0000 0000 0100 使能某个寄存器 第2为是GPIOA 所以使能4是使能A  
@@ -15,7 +15,7 @@
   // ODR 是需要修改的目标寄存器  
   // SET_BIT(GPIOC->ODR,GPIO_ODR_ODR13);//设置为1 为高电平，LED灯不亮，两端都是高电平  
   CLEAR_BIT(GPIOC->ODR,GPIO_ODR_ODR13); //复位设置为0，为低电平，LED灯亮
-#### 理解BSRR
+### 理解BSRR
   1. 端口位设置/清除寄存器BSRR（Bit Set Reset R）,一一对应ODR ，BSRR设置为1那么对应ODR寄存器会设置为0，(CLEAR_BIT设置为0，SET_BIT设置为1)  
   
     //BSRR 分为BR （Bit Reset） 和BS （Bit set）  
@@ -28,12 +28,12 @@
     SET_BIT(GPIOC->BRR,GPIO_BRR_BR13); //设置为 1 对应ODR设置为1同上  
     CLEAR_BIT(GPIOC->BRR,GPIO_BRR_BR13);//设置为0 对应ODR没有影响  
   
-#### 端口配置锁定寄存器
+### 端口配置锁定寄存器
  用于在规定时间内锁定配置（CRL,CRH）不能改变 0-15位对应端口 16位是全局锁 17~31保留
-#### 中断
+### 中断
 主程序被中断，去处理中断源程序
 ![](./images/中断系统_中断体系架构.png)
-##### NVIC 嵌套向量中断控制器
+#### NVIC 嵌套向量中断控制器
 中断来源：
 1. 内核其他控件
   - 系统滴答定时器
@@ -51,11 +51,11 @@ NVIC配置寄存器，一共0~20，每个里面有四个，每个占8位，高�
 NVIC对优先级分了5组，在程序中先对中断进行分组，而且只能分一次，多次分组只有最后一次生效。  
 ![](./images/中断系统_中断优先级分组.png)
 不同的组对应抢占和响应的位数（一共四位），group是抢占优先级，sub是响应优先级。最简单只选择值为3的分组，只有抢占优先级，谁优先看中断向量表序号。  
-##### 中断原理
+#### 中断原理
 ![](./images/中断原理_nvic电路流程.png)
 脉冲发生器直接交给处理器，上边NVIC是软件控制管理中断。  
 上升沿、下降沿是电信号上下瞬间触发中断。  
-##### 中断案例：检测按键按下
+#### 中断案例：检测按键按下
 1. 开启GPIO时钟（EXTI NVIC时钟是始终开启的，无需手动操作）
 2. 开启AFIO时钟（多路选择，引脚复用选择器，上图） 
 3. 配置AFIO 
@@ -64,5 +64,95 @@ NVIC对优先级分了5组，在程序中先对中断进行分组，而且只能
   - 配置上升沿触发（上升沿触发选择寄存器EXTI_RTSR）
   - 开启EXTI10线（中断屏蔽寄存器EXTI_IMR）
 5. 清除中断标志（挂起寄存器 EXTI_PR，写1）
+#### 代码
+##### 1. 初始化 LED
+```c
+// 使能GPIOC
+__HAL_RCC_GPIOC_CLK_ENABLE();
+// 配置结构体
+GPIO_InitTypeDef def;
+// 设置推挽输出模式
+def.Mode = GPIO_MODE_OUTPUT_PP;
+// 制定连接LED的引脚
+def.Pin = GPIO_PIN_13;
+// 输出模式不配置上拉下拉
+def.Pull = GPIO_NOPULL;
+// 配置速度
+def.Speed = GPIO_SPEED_HIGH;
+//初始化
+HAL_GPIO_Init(GPIOC,&def);
+//输出高电平，LED两端都是高电位不亮
+HAL_GPIO_WritePin(GPIOC,GPIO_PIN_13,GPIO_PIN_SET);
+```
+##### 2. 初始化KEY
+```c
+// 使能key连接的寄存器
+__HAL_RCC_GPIOB_CLK_ENABLE();
+// 配置结构体
+GPIO_InitTypeDef def2;
+//配置外部中断、上升沿（低电位切换到高电位瞬间）模式
+def2.Mode = GPIO_MODE_IT_RISING;
+// key连接的PIN脚
+def2.Pin = GPIO_PIN_0;
+//配置下拉输入 默认输出低电平 
+def2.Pull = GPIO_PULLDOWN;
+//不需要设置
+// def2.Speed = GPIO_SPEED_HIGH;
+//初始化
+HAL_GPIO_Init(GPIOB,&def2);
+```
+##### 3. 配置中断
+```c
+// 使能AFIO外部中断配置寄存器
+__HAL_RCC_AFIO_CLK_ENABLE();
+//配置按键的外部中断寄存器，AFIO配置引脚的复用选择
+// EXTICR 分四组 PIN [3,2,1,0]、[7,6,5,4]、[11,10,9,8]、[15,14,13,12]，
+// 对应组配置对应的 EXTICR{组号}_EXTI{PIN脚分组}_P{P引脚}值
+// PIN脚分组：0，1，2，3，4，9_5，15_10
+AFIO->EXTICR[0] |= AFIO_EXTICR1_EXTI0_PB;
+//配置EXTI
+EXTI->RTSR |= EXTI_RTSR_TR0;
+EXTI->IMR |= EXTI_IMR_MR0;
+// 配置NVIC 上面指定中断优先级抢占3 响应0 EXTI{PIN脚分组}_IRQn
+HAL_NVIC_SetPriority(EXTI0_IRQn,3,0);
+// 在 NVIC 中断控制器中启用上面指定中断。
+HAL_NVIC_EnableIRQ(EXTI0_IRQn);
+```
+##### 4. 配置回调函数
+```c
+// EXTI{对应分组}_IRQHandler,PIN脚分组：0，1，2，3，4，9_5，15_10
+/// HAL_GPIO_EXTI_IRQHandler 方法内自动清除中断请求
+void EXTI0_IRQHandler(void)
+{
+    //清除中断挂起标志位
+    // EXTI->PR |= EXTI_PR_PR0;
+    // __HAL_GPIO_EXTI_CLEAR_IT(GPIO_PIN_0);
+    HAL_GPIO_EXTI_IRQHandler(GPIO_PIN_0);
+
+}
+
+/// @brief 调用HAL_GPIO_EXTI_IRQHandler的回调,覆写HAL_GPIO_EXTI_Callback方法
+/// @param GPIO_Pin 
+void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
+{
+  if (GPIO_Pin == GPIO_PIN_0)
+  {
+    // 防抖延迟
+    HAL_Delay(10);
+    //判断依然保持高电平 就翻转LED
+    if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_0) == GPIO_PIN_SET)
+    // if ((GPIOB->IDR & GPIO_IDR_IDR0) != 0)
+    {
+      HAL_GPIO_TogglePin(GPIOC,GPIO_PIN_13);
+    }
+  }
+  
+}
+```
+##### 注意
+```c
+//设置定时器HAL_Delay的优先级最高，否则由于优先级太低，中断卡死，比我们设置的中断高即可
+HAL_NVIC_SetPriority(SysTick_IRQn,0,0);
+```
 
 
