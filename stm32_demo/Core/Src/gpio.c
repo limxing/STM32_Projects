@@ -47,6 +47,7 @@ void MX_GPIO_Init(void)
   __HAL_RCC_GPIOD_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  
 // 设置端口寄存器1 高电平
   HAL_GPIO_WritePin(GPIOB,LED1_PIN|LED2_PIN|LED3_PIN,GPIO_PIN_SET);
   GPIO_InitTypeDef def;
@@ -56,6 +57,14 @@ void MX_GPIO_Init(void)
   def.Speed = GPIO_SPEED_HIGH;
   //初始化端口输出模式
   HAL_GPIO_Init(GPIOB,&def);
+
+  HAL_GPIO_WritePin(LED0_PIN_PORT,LED0_PIN,GPIO_PIN_SET);
+  GPIO_InitTypeDef def2;
+  def2.Pin = LED0_PIN;
+  def2.Mode = GPIO_MODE_OUTPUT_PP;
+  def2.Pull = GPIO_NOPULL;
+  def2.Speed = GPIO_SPEED_HIGH;
+  HAL_GPIO_Init(LED0_PIN_PORT,&def2);
 }
 
 /* USER CODE BEGIN 2 */
