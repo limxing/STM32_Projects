@@ -1,33 +1,41 @@
 
 ### 点亮板上的C13 LED灯
   1. RCC->APB2ENR外设时钟使能寄存器（单独的寄存器记录需要使能的外设是那个寄存器）  
+  ```c
   //使能 GPIOC的外设寄存器，也就是让CPU处理这部分的, 设置为1  
   // RCC->APB2ENR |= 4; 4 -> 0000 0000 0000 0100 使能某个寄存器 第2为是GPIOA 所以使能4是使能A  
   SET_BIT(RCC->APB2ENR,RCC_APB2ENR_IOPCEN); 
-  
+  ```
   2. GPIO 工作模式
+  ```c
   // 0-7 是配置低位寄存器CRL 8-15 配置高位寄存器CRH 模式需要配置输入还是输入和速度，需要占用4位，32位只能配置8个PIN因此需要分高低位寄存器设置  
   // 设置 00 通用推挽输出 clear是清除因此设置为  
   CLEAR_BIT(GPIOC->CRH,GPIO_CRH_CNF13);  
+  
   // 设置 11 输出模式最大速度  
   SET_BIT(GPIOC ->CRH,GPIO_CRH_MODE13);  
+  ```
   3. 配置端口输出数据寄存器ODR(输入就是IDR) （就是端口Pin设置为0输出低电位 还是1输入高电位 ，一共32位，高位的16保留，低位的16一个位对应一个PIN）  
+  ```c
   // ODR 是需要修改的目标寄存器  
   // SET_BIT(GPIOC->ODR,GPIO_ODR_ODR13);//设置为1 为高电平，LED灯不亮，两端都是高电平  
   CLEAR_BIT(GPIOC->ODR,GPIO_ODR_ODR13); //复位设置为0，为低电平，LED灯亮
+  ```
 ### 理解BSRR
   1. 端口位设置/清除寄存器BSRR（Bit Set Reset R）,一一对应ODR ，BSRR设置为1那么对应ODR寄存器会设置为0，(CLEAR_BIT设置为0，SET_BIT设置为1)  
-  
+  ```c
     //BSRR 分为BR （Bit Reset） 和BS （Bit set）  
     SET_BIT(GPIOC->BSRR,GPIO_BSRR_BR13); // 设置为1 对应ODR设置为0了低电位,  
     CLEAR_BIT(GPIOC->BSRR,GPIO_BSRR_BR13); //设置为0 对应ODR没有影响  
 
     SET_BIT(GPIOC->BSRR,GPIO_BSRR_BS13);// 设置为1 对应ODR设置为1了高电位  
     CLEAR_BIT(GPIOC->BSRR,GPIO_BSRR_BS13);//设置为0 对应ODR没有影响  
+  ```
   2. 端口位清除寄存器BRR （Bit Reset）就是BSRR中的BR单独拿出来  
+  ```c
     SET_BIT(GPIOC->BRR,GPIO_BRR_BR13); //设置为 1 对应ODR设置为1同上  
     CLEAR_BIT(GPIOC->BRR,GPIO_BRR_BR13);//设置为0 对应ODR没有影响  
-  
+  ```
 ### 端口配置锁定寄存器
  用于在规定时间内锁定配置（CRL,CRH）不能改变 0-15位对应端口 16位是全局锁 17~31保留
 ### 中断
@@ -176,4 +184,71 @@ HAL_NVIC_SetPriority(SysTick_IRQn,0,0);
 |Tx|-| Rx|  
 |Rx|-| Tx|
 ##### 串口通讯协议
+波特率：每秒钟传输了多少个码元。在二进制世界码元和位等价。每秒传输的比特数表示波特率。  
+空闲位：1    
+起始位：0  
+停止位：双方约定可以是0.5、1、1.5、2个逻辑1的数据位表示；  
+有效数据位：起始位后紧接着是主体数据内容，一般是8位，先发送最低位，最后发送最高位，使用低电平0高电平1完成数据位的传输。  
+校验位：数据位后，奇校验 1的数目是偶数校验位是1否则是0，偶校验1的数目是偶数为0否者为1.  
+
+#### USART外设
+通用同步异步收发器，是一个串行通讯设备
+> 案例：轮询方式串口通讯  
+1. 查看CPU，PA9复用功能USART1_TX, PA10复用功能USART1_RX 
+![alt text](./images/image.png)
+```c
+  // 2.GPIO 工作模式 PA9 复用推挽mode 10 输出 11， 
+  // 配置MODE
+  GPIOA->CRH |= GPIO_CRH_MODE9; // 00 11 00 00
+  // 配置CNF 高位设置1 低位设置0
+  GPIOA->CRH |= GPIO_CRH_CNF9_1; //10 00 00 00
+  GPIOA->CRH &= ~GPIO_CRH_CNF9_0;//01 00 00 00
+  // PA10 浮空mode 01 输入 00 ,MODE10就是寄存器对应PIN
+  GPIOA->CRH &= ~GPIO_CRH_MODE10; //[00 11] [00 00] [00 00] 
+  GPIOA->CRH &= ~GPIO_CRH_MODE10_1;// 0010 0000 0000
+  GPIOA->CRH |= GPIO_CRH_MODE10_0;// 0001 0000 0000
+```
+2. 在波特率寄存器（USART_BRR）设置波特率  ,（1152000bps在72MHz下值是39.0625，小数0.0625*16 得值再转16进制得到27 1）波特率寄存器后16为有效，最后四位是小数
+```c
+USART1 ->BRR = 0x271;
+```
+3.  收发使能和串口使能,在控制寄存器USART_CR1,查看手册对应位配置
+```C
+USART1->CR1 |= (USART_CR1_TE | USART1_CR!_RE);//使能USART1的收发功能
+USART1->CR1 |= USART_CR1_UE; //使能USART1功能
+
+USART1->CR1 &= ~USART_CR1_M;//数据8位
+USART1->CR1 &= ~USART_CR1_PCE;//0 不校验
+USART1->CR2  &= ~USART_CR2_STOP;//停止位 00
+```
+4. 发送接收数据代码
+```c
+void receive()
+{
+  // 判断接收缓冲区位置RXNE是否非空，表示满了
+  while((USERAT1->SR & USART_SR_RXNE) == 0){
+
+  }
+  return USART1->DR;
+}
+
+void send_char(uint8_t c)
+{
+  //判断发送缓冲区TXE位是否为空,SR_TXE表示已经移到移位寄存器，继续发送下一个数据，0表示还没有
+   while((USERAT1->SR & USART_SR_TXE) == 0){
+
+  }
+  return USART1->DR = c;
+}
+
+```
+* USART_BRR 波特率设置寄存器  
+* USART_CR 控制寄存器  
+* USART_DR 数据寄存器，只用到了最后的9位0-8  
+* USART_SR 状态寄存器，判断缓冲寄存器是否满了或者发送移位了  
+
+5. 接收中断使能，非轮询方式
+```C
+USART1->CR1 |= USART_CR1_RXNEIE;
+```
 

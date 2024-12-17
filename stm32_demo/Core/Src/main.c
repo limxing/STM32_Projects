@@ -19,10 +19,12 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "gpio.h"
+#include <string.h>
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "LED.h"
+#include "systick.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -85,7 +87,7 @@ int main(void)
   /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
-  // MX_GPIO_Init();
+  MX_GPIO_Init();
   /* USER CODE BEGIN 2 */
 
   /* USER CODE END 2 */
@@ -94,10 +96,171 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   LED leds[] = {LED1_PIN,LED2_PIN,LED3_PIN};
 
+
+
+  // Systick_Init();
+
+  while (1)
+  {
+
+    // Usart_SendChar('H');
+    // USART_SendString("Hello World");
+    // Usart_SendChar('\n');
+
+    
+    // Usart_SendChar(ch);
+    // HAL_Delay(1000);
+    // HAL_GPIO_TogglePin(LED0_PIN_PORT,LED0_PIN);
+  }
+  /* USER CODE END 3 */
+}
+
+void TIM6_Init()
+{
+    // 定时器使能 
+  RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;
+  //设置预分频值7199，做7200分频  得到10000Hz
+  TIM4->PSC = 7199;
+  // 设置自动重装载值9999，表示计数10000次产生一个UEV
+  TIM4->ARR = 9999;
+  // 更新中断使能
+  TIM4->DIER |= TIM_DIER_UIE;
+  // 配置NVIC
+  NVIC_SetPriorityGrouping(3);
+  NVIC_SetPriority(TIM4_IRQn,2);
+  NVIC_EnableIRQ(TIM4_IRQn);
+
+  // 开启定时器
+  TIM4->CR1 |= TIM_CR1_CEN;
+}
+
+void TIM6_IRQnHandler()
+{
+  // 清除中断标志
+  TIM4->SR &= ~TIM_SR_UIF;
+  HAL_GPIO_TogglePin(LED0_PIN_PORT,LED0_PIN);
+  LED_Toogle(LED1_PIN);
+}
+
+// uint16_t sysCount = 0;
+// // 系统定时器中断回调
+// void HAL_IncTick2()
+// {
+//   sysCount++;
+//   if (sysCount == 1000)
+//   {
+//     HAL_GPIO_TogglePin(LED0_PIN_PORT,LED0_PIN);
+//     LED_Toogle(LED1_PIN);
+//     sysCount = 0;
+//   }
+// }
+
+
+void USART_DEMO()
+{
+    //中断DEMO
+  // interruptDemo();
+
+
   // HAL_GPIO_WritePin(LED0_PIN_PORT,LED0_PIN,GPIO_PIN_RESET);
   
   // LED_On(LED1_PIN);
+  // 1.配置时钟
+  __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_USART1_CLK_ENABLE();
 
+
+  // 2.GPIO 工作模式 PA9 复用推挽mode 10 输出 11， 
+  // // 配置MODE
+  // GPIOA->CRH |= GPIO_CRH_MODE9; // 00 11 00 00
+  // // 配置CNF 高位设置1 低位设置0
+  // GPIOA->CRH |= GPIO_CRH_CNF9_1; //10 00 00 00
+  // GPIOA->CRH &= ~GPIO_CRH_CNF9_0;//01 00 00 00
+  // // PA10 浮空mode 01 输入 00 ,MODE10就是寄存器对应PIN
+  // GPIOA->CRH &= ~GPIO_CRH_MODE10; //[00 11] [00 00] [00 00] 
+  // GPIOA->CRH &= ~GPIO_CRH_MODE10_1;// 0010 0000 0000
+  // GPIOA->CRH |= GPIO_CRH_MODE10_0;// 0001 0000 0000
+  GPIO_InitTypeDef def;
+  def.Mode = GPIO_MODE_AF_PP;
+  def.Pin = GPIO_PIN_9;
+  def.Pull = GPIO_NOPULL;
+  def.Speed = GPIO_SPEED_HIGH;
+  HAL_GPIO_Init(GPIOA,&def);
+  GPIO_InitTypeDef def2;
+  def2.Mode = GPIO_MODE_INPUT;
+  def2.Pin = GPIO_PIN_10;
+  HAL_GPIO_Init(GPIOA,&def);
+// 3.配置串口
+
+  USART1->BRR = 0x271;
+  USART1->CR1 |= (USART_CR1_UE | USART_CR1_TE | USART_CR1_RE);
+  USART1->CR1 &= ~USART_CR1_M;
+  USART1->CR1 &= ~USART_CR1_PCE;
+  USART1->CR2 &= ~USART_CR2_STOP;
+
+
+
+    //设置定时器HAL_Delay的优先级最高，否则由于优先级太低，中断卡死，比我们设置的中断高即可
+  HAL_NVIC_SetPriority(SysTick_IRQn,2,0);
+
+  // 开启中断使能
+  USART1->CR1 |= USART_CR1_IDLEIE;
+  USART1->CR1 |= USART_CR1_RXNEIE;
+  NVIC_SetPriorityGrouping(3);
+  NVIC_SetPriority(USART1_IRQn,3);
+  NVIC_EnableIRQ(USART1_IRQn);
+}
+
+
+uint8_t buffer[100] = {};
+uint8_t size = 0;
+
+void USART1_IRQHandler()
+{
+  if (USART1->SR & USART_SR_RXNE)
+  {
+    // 接收完成一个字符
+    buffer[size] = USART1->DR;
+    size++;
+  }else if (USART1->SR & USART_SR_IDLE)
+  { 
+    // 字符串整体接收完成
+    // 清除IDLE
+    USART1->DR;
+    USART_SendString(buffer,size);
+    size = 0;
+  }
+  
+  
+}
+void USART_SendString(uint8_t *str, uint8_t *size)
+{
+  for (uint8_t i = 0; i < size; i++)
+  {
+    Usart_SendChar(str[i]);
+  }
+  
+}
+void Usart_SendChar(uint8_t ch)
+{
+  while ((USART1->SR & USART_SR_TXE) == 0)
+  { 
+  }
+  USART1->DR = ch; 
+  
+}
+
+uint8_t USART_ReceiveChar()
+{
+  while ((USART1->SR & USART_SR_RXNE) == 0) 
+  {
+  }
+  return USART1->DR;
+  
+}
+/// @brief 中断功能
+void interruptDemo()
+{
       // 按键是B0 灯是B12
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
@@ -142,25 +305,6 @@ int main(void)
     // // EXTI0_IRQHandler (配置回调函数，按下按键回调)
     HAL_NVIC_SetPriority(EXTI0_IRQn,3,0);
     HAL_NVIC_EnableIRQ(EXTI0_IRQn);
-
-    //设置定时器HAL_Delay的优先级最高，否则由于优先级太低，中断卡死，比我们设置的中断高即可
-    HAL_NVIC_SetPriority(SysTick_IRQn,0,0);
-    
-  while (1)
-  {
-    // /* USER CODE END WHILE */
-    // for (uint8_t i = 0; i < 3; i++)
-    // {
-    //   LED_On(leds[i]);
-    //   HAL_Delay(500);
-    // }
-    // for (uint8_t i = 0; i < 3; i++)
-    // {
-    //   LED_Off(leds[2-i]);
-    //   HAL_Delay(500);
-    // }
-  }
-  /* USER CODE END 3 */
 }
 /// @brief 调用HAL_GPIO_EXTI_IRQHandler的回调
 /// @param GPIO_Pin 
@@ -168,7 +312,7 @@ void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
   if (GPIO_Pin == GPIO_PIN_0)
   {
-    HAL_Delay(10);
+    HAL_Delay(20);
     //判断依然保持高电平 就翻转LED
     if(HAL_GPIO_ReadPin(GPIOB,GPIO_PIN_0) == GPIO_PIN_SET)
     // if ((GPIOB->IDR & GPIO_IDR_IDR0) != 0)
