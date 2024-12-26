@@ -96,23 +96,71 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   LED leds[] = {LED1_PIN,LED2_PIN,LED3_PIN};
 
-
-
+ 
   // Systick_Init();
-
   while (1)
   {
-
-    // Usart_SendChar('H');
-    // USART_SendString("Hello World");
-    // Usart_SendChar('\n');
-
     
-    // Usart_SendChar(ch);
-    // HAL_Delay(1000);
-    // HAL_GPIO_TogglePin(LED0_PIN_PORT,LED0_PIN);
   }
   /* USER CODE END 3 */
+}
+void TIM2_Main()
+{
+uint8_t dutyCycle = 0;
+  uint8_t dir = 0;
+  while (1)
+  {
+    if (dir == 0) 
+    {
+      dutyCycle += 1;
+      if (dutyCycle >= 99)
+      {
+        dir = 1;
+      }
+      
+    }else{
+      dutyCycle -= 1;
+      if (dutyCycle <= 1)
+      {
+        dir = 0;
+      }
+      
+    }
+    TIM2->CCR2 = dutyCycle;
+    HAL_Delay(10);
+  }
+}
+
+void TIM2_Init()
+{
+   // 开启时钟，配置GPIO A1工作模式
+  RCC->APB2ENR |= RCC_APB2ENR_IOPAEN;
+  RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;
+  GPIOA->CRL |= GPIO_CRL_MODE1;
+  GPIOA->CRL |= GPIO_CRL_CNF1_1;
+  GPIOA->CRL |= GPIO_CRL_CNF1_0;
+  // 定时器设置
+  // 预分频值
+  TIM2->PSC = 7199;
+  // 重装载值,每隔10ms溢出一次
+  TIM2->ARR = 99;
+  //计数方向，给0 向上计数
+  TIM2->CR1 &= ~TIM_CR1_DIR;
+  //设置通道2的CCR值 （TIM2_CH2）,初始值多少都可以，占空比
+  TIM2->CCR2 = 50;
+  // 通道2的工作模式，00 输出模式 
+  TIM2->CCMR1 &= ~TIM_CCMR1_CC2S;
+  // 配置通道2为PWM1模式 110 (给CCMR1寄存器某一位设置0还是1，|= 是设置1 &=~是设置0，这里需要配置三位，右边是第0位)
+  TIM2->CCMR1 |= TIM_CCMR1_OC2M_2;
+  TIM2->CCMR1 |= TIM_CCMR1_OC2M_1;
+  TIM2->CCMR1 &= ~TIM_CCMR1_OC2M_0;
+  // 配置CCER捕获/比较使能寄存器
+  TIM2->CCER |= TIM_CCER_CC2E;
+
+// 打开计时器
+  TIM2->CR1 |= TIM_CR1_CEN;
+  // 关闭计数器
+  // TIM2->CR1 &= ~TIM_CR1_CEN;
 }
 
 void TIM6_Init()
@@ -189,7 +237,7 @@ void USART_DEMO()
   GPIO_InitTypeDef def2;
   def2.Mode = GPIO_MODE_INPUT;
   def2.Pin = GPIO_PIN_10;
-  HAL_GPIO_Init(GPIOA,&def);
+  HAL_GPIO_Init(GPIOA,&def2);
 // 3.配置串口
 
   USART1->BRR = 0x271;
